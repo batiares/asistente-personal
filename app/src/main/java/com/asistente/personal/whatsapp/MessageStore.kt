@@ -7,12 +7,18 @@ import org.json.JSONObject
 
 data class WaMessage(val time: Long, val chat: String, val text: String, val important: Boolean)
 
-/** Guarda los mensajes SOLO en el teléfono (SharedPreferences). No se envían a ningún servidor. */
-object MessageStore {
-    private const val KEY = "messages"
-    private const val MAX = 300
+/** Mensajes de WhatsApp capturados de las notificaciones. */
+val MessageStore = NotificationStore("whatsapp")
 
-    fun prefs(ctx: Context): SharedPreferences = ctx.getSharedPreferences("whatsapp", Context.MODE_PRIVATE)
+/** Correos capturados de las notificaciones de Gmail (no necesita Google Cloud). */
+val MailStore = NotificationStore("gmail")
+
+/** Guarda lo capturado SOLO en el teléfono (SharedPreferences). No se envía a ningún servidor. */
+class NotificationStore(private val file: String) {
+    private val KEY = "messages"
+    private val MAX = 300
+
+    fun prefs(ctx: Context): SharedPreferences = ctx.getSharedPreferences(file, Context.MODE_PRIVATE)
 
     fun load(ctx: Context): List<WaMessage> {
         val arr = runCatching { JSONArray(prefs(ctx).getString(KEY, "[]")) }.getOrElse { JSONArray() }

@@ -28,6 +28,7 @@ import com.asistente.personal.ui.AppState
 import com.asistente.personal.ui.AsistenteApp
 import com.asistente.personal.ui.AsistenteTheme
 import com.asistente.personal.whatsapp.FilterConfig
+import com.asistente.personal.whatsapp.MailStore
 import com.asistente.personal.whatsapp.MessageStore
 import com.asistente.personal.whatsapp.WhatsAppListenerService
 import com.google.android.gms.auth.api.identity.Identity
@@ -46,6 +47,7 @@ class MainActivity : ComponentActivity(), AppActions {
     // Campo (no lambda suelta) para que SharedPreferences no lo pierda: solo guarda referencias débiles.
     private val messagesListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         state.messages = MessageStore.load(this)
+        state.mail = MailStore.load(this)
     }
 
     private val authLauncher =
@@ -66,7 +68,9 @@ class MainActivity : ComponentActivity(), AppActions {
         state.keywords = FilterConfig.keywords(this)
         state.vipChats = FilterConfig.vipChats(this)
         state.hideUnimportant = FilterConfig.hideUnimportant(this)
+        state.mail = MailStore.load(this)
         MessageStore.prefs(this).registerOnSharedPreferenceChangeListener(messagesListener)
+        MailStore.prefs(this).registerOnSharedPreferenceChangeListener(messagesListener)
 
         refreshT1()
         setContent { AsistenteTheme { AsistenteApp(state, this) } }
@@ -79,6 +83,7 @@ class MainActivity : ComponentActivity(), AppActions {
 
     override fun onDestroy() {
         MessageStore.prefs(this).unregisterOnSharedPreferenceChangeListener(messagesListener)
+        MailStore.prefs(this).unregisterOnSharedPreferenceChangeListener(messagesListener)
         tts?.shutdown()
         super.onDestroy()
     }
@@ -178,6 +183,13 @@ class MainActivity : ComponentActivity(), AppActions {
 
     override fun clearMessages() = MessageStore.clear(this)
 
+    override fun clearMail() = MailStore.clear(this)
+
+    override fun openGmail() {
+        packageManager.getLaunchIntentForPackage(WhatsAppListenerService.GMAIL)?.let { startActivity(it) }
+            ?: openUrl("https://mail.google.com")
+    }
+
     override fun openUrl(url: String) {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
     }
@@ -188,7 +200,11 @@ class MainActivity : ComponentActivity(), AppActions {
         val msgs = state.messages.filter { it.important && it.time > since }.take(3)
         val next = T1Schedule.next(state.matches)
         val text = buildString {
-            if (state.emails.isEmpty()) append("No tienes correos importantes cargados. ")
+            val recentMail = state.mail.filter { it.time > since }.take(3)
+            if (state.emails.isEmpty() && recentMail.isNotEmpty()) {
+                append("Tienes ${recentMail.size} correos importantes recientes. ")
+                recentMail.forEach { append("De ${it.chat}: ${it.text.lineSequence().first()}. ") }
+            } else if (state.emails.isEmpty()) append("No tienes correos importantes nuevos. ")
             else {
                 append("Tienes ${state.emails.size} correos importantes. ")
                 state.emails.take(3).forEach { append("De ${it.fromName}: ${it.subject}. ") }

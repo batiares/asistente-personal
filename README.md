@@ -41,9 +41,22 @@ Desde terminal:
 
 El APK queda en `app/build/outputs/apk/debug/app-debug.apk`.
 
+## Correos importantes sin configurar nada
+
+Con el **acceso a notificaciones** (el mismo que usa WhatsApp), la app guarda cada correo del que Gmail te avisa.
+Para que solo lleguen los importantes: *Gmail → ☰ → Configuración → tu cuenta → Notificaciones → Solo alta prioridad*.
+
+### Activar el acceso a notificaciones (apps instaladas desde APK)
+
+Android lo bloquea ("Controlled by Restricted Setting"). Se desbloquea una vez:
+
+1. *Ajustes → Notificaciones → Acceso a notificaciones → Asistente* y **toca el interruptor gris**; sale el aviso "Restricted setting" → OK.
+2. *Ajustes → Apps → Asistente* → **⋮** (solo aparece después del paso 1) → **Allow restricted settings** → confirma con huella o PIN.
+3. Vuelve al paso 1 y activa el interruptor.
+
 ## Configurar Gmail (una sola vez)
 
-Google exige registrar la app para poder leer correos:
+Opcional: para leer la bandeja completa (no solo lo que llega por notificación), Google exige registrar la app:
 
 1. Entra a <https://console.cloud.google.com/> y crea un proyecto.
 2. **APIs y servicios → Biblioteca** → habilita **Gmail API**.

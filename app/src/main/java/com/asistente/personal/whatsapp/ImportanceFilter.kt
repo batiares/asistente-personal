@@ -20,7 +20,7 @@ object ImportanceFilter {
 
     // WhatsApp publica avisos como "5 mensajes nuevos" o "Buscando mensajes nuevos" que no son mensajes reales.
     private val AVISOS = Regex(
-        "^\\d+ (mensajes nuevos|new messages)|buscando mensajes|checking for new messages",
+        "^\\d+ (mensajes nuevos|new messages|correos nuevos|new emails)|buscando mensajes|checking for new messages",
         RegexOption.IGNORE_CASE,
     )
 

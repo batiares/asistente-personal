@@ -66,7 +66,7 @@ fun AsistenteApp(state: AppState, actions: AppActions, initialTab: Int = 0) {
     }
     val dayAgo = now.toEpochMilli() - 24 * 60 * 60 * 1000L
     val badges = listOf(
-        state.emails.size,
+        state.emails.size + state.mail.count { it.time > dayAgo },
         state.messages.count { it.important && it.time > dayAgo },
         if (T1Schedule.next(state.matches) != null) 1 else 0,
     )
@@ -162,13 +162,48 @@ private fun StatusLine(text: String, color: Color = Neon.Cyan) {
 @Composable
 fun EmailsScreen(state: AppState, actions: AppActions) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = LIST_PADDING, verticalArrangement = GAP) {
+        if (!state.listenerEnabled) item { AccessPanel(actions) }
         item {
-            SectionHeader("Bandeja prioritaria", Neon.Yellow,
-                trailing = if (state.emails.isNotEmpty()) "${state.emails.size} pendientes" else null)
+            SectionHeader("Correos importantes", Neon.Yellow,
+                trailing = if (state.mail.isNotEmpty()) "${state.mail.size} recibidos" else null)
         }
+        if (state.mail.isEmpty()) item {
+            CyberPanel(accent = Neon.Yellow) {
+                Text("> ESPERANDO CORREOS", style = MaterialTheme.typography.labelLarge, color = Neon.Yellow)
+                Text("Aquí aparecen los correos en cuanto Gmail te avise. Para que solo avise de los importantes:",
+                    style = MaterialTheme.typography.bodyMedium)
+                Steps(
+                    "Abre Gmail → menú ☰ → Configuración → tu cuenta.",
+                    "Notificaciones → elige \"Solo alta prioridad\".",
+                )
+                CyberButton("Abrir Gmail", actions::openGmail, Modifier.fillMaxWidth(), filled = false)
+            }
+        }
+        items(state.mail) { m ->
+            val subject = m.text.lineSequence().first()
+            val snippet = m.text.substringAfter('\n', "").trim()
+            CyberPanel(accent = Neon.Yellow, onClick = actions::openGmail) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Tag("Prioridad", Neon.Yellow)
+                    Text(m.chat, style = MaterialTheme.typography.labelLarge, color = Neon.Cyan,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(FECHA_MSG.format(Instant.ofEpochMilli(m.time)),
+                        style = MaterialTheme.typography.labelSmall, color = Neon.Muted)
+                }
+                Text(subject, style = MaterialTheme.typography.titleMedium)
+                if (snippet.isNotEmpty()) Text(snippet, style = MaterialTheme.typography.bodySmall,
+                    maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        if (state.mail.isNotEmpty()) item {
+            CyberButton("Borrar historial", actions::clearMail, color = Neon.Red, filled = false)
+        }
+
+        // Opción avanzada: leer la bandeja con la API de Gmail (requiere registrar la app en Google Cloud).
+        item { SectionHeader("Bandeja completa · avanzado", Neon.Muted) }
         item {
-            CyberButton(if (state.emails.isEmpty()) "Conectar Gmail" else "Sincronizar",
-                actions::refreshEmails, Modifier.fillMaxWidth())
+            CyberButton(if (state.emails.isEmpty()) "Conectar API de Gmail" else "Sincronizar",
+                actions::refreshEmails, Modifier.fillMaxWidth(), color = Neon.Muted, filled = false)
         }
         if (state.gmailNeedsSetup) item { GmailSetupPanel(actions) }
         else if (state.emailStatus.isNotEmpty()) item {
@@ -272,15 +307,17 @@ private fun AccessPanel(actions: AppActions) {
             Blink(Neon.Red)
             Text("ACCESO BLOQUEADO", style = MaterialTheme.typography.titleMedium, color = Neon.Red)
         }
-        Text("Android bloquea el acceso a notificaciones en apps instaladas desde APK. Desbloquéalo una sola vez:",
-            style = MaterialTheme.typography.bodyMedium)
+        Text("Para leer WhatsApp y Gmail la app necesita acceso a notificaciones. Android lo bloquea en apps " +
+            "instaladas desde APK; se desbloquea una sola vez:", style = MaterialTheme.typography.bodyMedium)
         Steps(
-            "Toca AJUSTES DE LA APP.",
-            "Arriba a la derecha toca ⋮ y elige \"Permitir ajustes restringidos\" (Allow restricted settings).",
-            "Regresa aquí, toca ACCESO A NOTIFICACIONES y activa Asistente.",
+            "Toca ACCESO A NOTIFICACIONES y toca el interruptor gris aunque esté bloqueado. " +
+                "Saldrá el aviso \"Restricted setting\": dale OK.",
+            "Toca AJUSTES DE LA APP. Ahora sí aparece ⋮ arriba a la derecha → \"Allow restricted settings\" " +
+                "(Permitir ajustes restringidos). Confirma con tu huella o PIN.",
+            "Vuelve a ACCESO A NOTIFICACIONES y activa el interruptor.",
         )
-        CyberButton("01 · Ajustes de la app", actions::openAppSettings, Modifier.fillMaxWidth())
-        CyberButton("02 · Acceso a notificaciones", actions::openNotificationAccess, Modifier.fillMaxWidth(),
+        CyberButton("01 · Acceso a notificaciones", actions::openNotificationAccess, Modifier.fillMaxWidth())
+        CyberButton("02 · Ajustes de la app", actions::openAppSettings, Modifier.fillMaxWidth(),
             color = Neon.Cyan, filled = false)
     }
 }

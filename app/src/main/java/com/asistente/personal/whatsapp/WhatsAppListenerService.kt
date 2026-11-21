@@ -5,12 +5,14 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 
 /**
- * Lee las notificaciones de WhatsApp (el usuario debe dar "Acceso a notificaciones").
- * Clasifica cada mensaje y, si se activa la opción, quita de la barra los de grupos que no son importantes.
+ * Lee las notificaciones de WhatsApp y Gmail (el usuario debe dar "Acceso a notificaciones").
+ * WhatsApp: clasifica cada mensaje y, si se activa la opción, quita de la barra los de grupos que no son importantes.
+ * Gmail: guarda remitente y asunto (el nombre de la clase se conserva para no perder el permiso ya otorgado).
  */
 class WhatsAppListenerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        if (sbn.packageName == GMAIL) return onGmail(sbn)
         if (sbn.packageName !in WHATSAPP) return
         val n = sbn.notification
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
@@ -36,7 +38,20 @@ class WhatsAppListenerService : NotificationListenerService() {
         if (isGroup && !important && FilterConfig.hideUnimportant(this)) cancelNotification(sbn.key)
     }
 
+    /** Gmail pone el remitente en el título y "Asunto\nfragmento" en el texto grande. */
+    private fun onGmail(sbn: StatusBarNotification) {
+        val n = sbn.notification
+        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+        val extras = n.extras
+        val sender = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: return
+        val body = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
+            ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString() ?: return
+        if (ImportanceFilter.isSystemNotice(sender) || ImportanceFilter.isSystemNotice(body)) return
+        MailStore.add(this, WaMessage(sbn.postTime, sender, body.trim(), important = true))
+    }
+
     companion object {
         val WHATSAPP = setOf("com.whatsapp", "com.whatsapp.w4b")
+        const val GMAIL = "com.google.android.gm"
     }
 }

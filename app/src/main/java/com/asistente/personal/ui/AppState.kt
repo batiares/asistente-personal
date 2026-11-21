@@ -13,6 +13,8 @@ class AppState {
     var emails by mutableStateOf<List<Email>>(emptyList())
     var emailStatus by mutableStateOf("")
     var gmailNeedsSetup by mutableStateOf(false)
+    /** Correos capturados de las notificaciones de Gmail. */
+    var mail by mutableStateOf<List<WaMessage>>(emptyList())
 
     var messages by mutableStateOf<List<WaMessage>>(emptyList())
     var listenerEnabled by mutableStateOf(false)
@@ -35,6 +37,8 @@ interface AppActions {
     fun addToCalendar(m: Match)
     fun saveFilter(keywords: String, vipChats: String, hideUnimportant: Boolean)
     fun clearMessages()
+    fun openGmail()
+    fun clearMail()
 }
 
 const val GMAIL_GUIDE_URL = "https://github.com/batiares/asistente-personal#configurar-gmail-una-sola-vez"

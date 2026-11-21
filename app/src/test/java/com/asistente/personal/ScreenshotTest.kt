@@ -35,6 +35,8 @@ class ScreenshotTest {
         override fun addToCalendar(m: Match) {}
         override fun saveFilter(keywords: String, vipChats: String, hideUnimportant: Boolean) {}
         override fun clearMessages() {}
+        override fun openGmail() {}
+        override fun clearMail() {}
     }
 
     private fun match(id: String, daysFromNow: Long, rival: String, code: String, state: String, t1: Int?, opp: Int?) =
@@ -48,6 +50,11 @@ class ScreenshotTest {
             Email("3", "GitHub <noreply@github.com>", "[asistente-personal] Run succeeded", "Compilar y publicar APK: todas las tareas terminaron con éxito."),
         )
         val now = System.currentTimeMillis()
+        emails = emptyList()
+        mail = listOf(
+            WaMessage(now - 300_000, "Mi Banco", "Tu pago vence mañana\nRecuerda realizar tu pago antes del 21 de noviembre.", true),
+            WaMessage(now - 5_400_000, "Coordinación Académica", "Cambio de horario: examen final\nEl examen de Cálculo se mueve al lunes a las 9:00.", true),
+        )
         messages = listOf(
             WaMessage(now - 600_000, "Equipo Proyecto Final", "Ana: URGENTE, la entrega se adelantó a mañana", true),
             WaMessage(now - 3_600_000, "Familia", "Mamá: ¿vienes a comer el domingo?", true),
