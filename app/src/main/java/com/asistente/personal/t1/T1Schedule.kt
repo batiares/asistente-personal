@@ -101,4 +101,15 @@ object T1Schedule {
     fun fechaMx(i: Instant): String = FECHA.format(enMexico(i)).replaceFirstChar { it.uppercase() }
     fun horaMx(i: Instant): String = HORA.format(enMexico(i))
     fun horaCorea(i: Instant): String = HORA.format(enCorea(i)) + " (" + FECHA.format(enCorea(i)) + ")"
+    fun fechaCorta(i: Instant): String = CORTA.format(enMexico(i)).uppercase()
+    private val CORTA = DateTimeFormatter.ofPattern("dd MMM", ES_MX)
+
+    /** Cuenta regresiva tipo "2D 04H 13M" (o "04H 13M" si falta menos de un día). */
+    fun faltan(start: Instant, now: Instant): String {
+        val min = maxOf(0L, java.time.Duration.between(now, start).toMinutes())
+        val d = min / (24 * 60)
+        val h = (min / 60) % 24
+        val m = min % 60
+        return (if (d > 0) "${d}D " else "") + "%02dH %02dM".format(h, m)
+    }
 }

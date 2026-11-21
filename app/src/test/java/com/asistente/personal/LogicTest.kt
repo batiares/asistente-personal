@@ -52,6 +52,13 @@ class LogicTest {
         assertEquals(9, T1Schedule.enCorea(t).dayOfMonth)
     }
 
+    @Test fun cuentaRegresiva() {
+        val now = Instant.parse("2026-11-20T00:00:00Z")
+        assertEquals("2D 04H 05M", T1Schedule.faltan(Instant.parse("2026-11-22T04:05:00Z"), now))
+        assertEquals("00H 30M", T1Schedule.faltan(Instant.parse("2026-11-20T00:30:00Z"), now))
+        assertEquals("00H 00M", T1Schedule.faltan(Instant.parse("2026-11-19T00:00:00Z"), now))
+    }
+
     @Test fun filtroDeImportancia() {
         val keys = ImportanceFilter.parseList("urgente, reunión , @Robert")
         assertEquals(listOf("urgente", "reunión", "@Robert"), keys)

@@ -37,7 +37,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest assembleRelease
+          ./gradlew recordPaparazziDebug assembleRelease
           cp app/build/outputs/apk/release/app-release.apk asistente.apk
 
       - uses: actions/upload-artifact@v4
@@ -45,9 +45,14 @@ jobs:
           name: asistente-apk
           path: asistente.apk
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capturas
+          path: app/src/test/snapshots/images/
+
       # La página de descarga apunta a releases/latest/download/asistente.apk, que siempre es la última.
       - name: Publicar en Releases
-        if: github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
