@@ -193,8 +193,12 @@ class MainActivity : ComponentActivity(), AppActions {
     override fun clearMail() = MailStore.clear(this)
 
     override fun openGmail() {
-        packageManager.getLaunchIntentForPackage(WhatsAppListenerService.GMAIL)?.let { startActivity(it) }
-            ?: openUrl("https://mail.google.com")
+        val gmail = WhatsAppListenerService.GMAIL
+        packageManager.getLaunchIntentForPackage(gmail)?.let { return startActivity(it) }
+        // Sin la app de Gmail no hay notificaciones que capturar: se manda a instalarla.
+        Toast.makeText(this, "Instala la app de Gmail para recibir tus correos importantes", Toast.LENGTH_LONG).show()
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$gmail"))) }
+            .onFailure { openUrl("https://play.google.com/store/apps/details?id=$gmail") }
     }
 
     override fun openUrl(url: String) {

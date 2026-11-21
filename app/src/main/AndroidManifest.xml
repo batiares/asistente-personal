@@ -5,6 +5,8 @@
 
     <!-- Necesario en Android 11+ para encontrar el motor de voz (Text-to-Speech). -->
     <queries>
+        <!-- Sin esto, Android 11+ oculta Gmail y no se puede abrir la app desde el Asistente. -->
+        <package android:name="com.google.android.gm" />
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
