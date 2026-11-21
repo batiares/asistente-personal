@@ -22,6 +22,10 @@ La firma usa una llave fija (secretos `KEYSTORE_BASE64` y `KEYSTORE_PASSWORD` de
 las actualizaciones se instalen encima y Gmail siga reconociendo la app. **Guarda una copia de esa llave**: si se pierde,
 hay que desinstalar la app y registrar una SHA-1 nueva en Google Cloud.
 
+**Si Play Protect dice "App blocked to protect your device":** Google bloquea los APK descargados que piden acceso a
+notificaciones. Desactiva temporalmente *Play Store → tu foto → Play Protect → ⚙️ → Analizar apps con Play Protect*,
+instala y vuelve a activarlo. Instalar por `adb` no tiene este bloqueo.
+
 ## Compilar en tu computadora
 
 Requisitos: Android Studio (o JDK 17 + Android SDK 35).
