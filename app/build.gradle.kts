@@ -12,8 +12,26 @@ android {
         applicationId = "com.asistente.personal"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        // En GitHub Actions cada compilación sube de versión para que el celular acepte la actualización.
+        val run = System.getenv("GITHUB_RUN_NUMBER")?.toInt() ?: 1
+        versionCode = run
+        versionName = "0.1.$run"
+    }
+
+    // La llave fija llega como secreto en CI. Sin ella se firma con la llave debug (solo para pruebas locales).
+    val keystore = System.getenv("KEYSTORE_FILE")
+    signingConfigs {
+        if (keystore != null) create("release") {
+            storeFile = file(keystore)
+            storePassword = System.getenv("KEYSTORE_PASSWORD")
+            keyAlias = "asistente"
+            keyPassword = System.getenv("KEYSTORE_PASSWORD")
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName(if (keystore != null) "release" else "debug")
+        }
     }
     buildFeatures { compose = true }
     compileOptions {

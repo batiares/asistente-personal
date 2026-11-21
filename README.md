@@ -11,7 +11,18 @@ App de Android que funciona como un asistente personal:
 
 Todo se queda en tu teléfono: los mensajes de WhatsApp se guardan solo localmente y la app no tiene servidor propio.
 
-## Cómo compilar e instalar
+## Descargar en el celular (sin cable ni modo desarrollador)
+
+Página de descarga: **https://batiares.github.io/asistente-personal/**
+
+Cada vez que se sube un cambio a `main`, GitHub Actions corre los tests, compila el APK firmado y lo publica en
+[Releases](https://github.com/batiares/asistente-personal/releases). La página siempre descarga la versión más reciente.
+
+La firma usa una llave fija (secretos `KEYSTORE_BASE64` y `KEYSTORE_PASSWORD` del repo, alias `asistente`) para que
+las actualizaciones se instalen encima y Gmail siga reconociendo la app. **Guarda una copia de esa llave**: si se pierde,
+hay que desinstalar la app y registrar una SHA-1 nueva en Google Cloud.
+
+## Compilar en tu computadora
 
 Requisitos: Android Studio (o JDK 17 + Android SDK 35).
 
@@ -35,11 +46,11 @@ Google exige registrar la app para poder leer correos:
 3. **Pantalla de consentimiento de OAuth** → tipo *Externo*, deja la app en modo **Prueba** y agrega tu propio correo en **Usuarios de prueba**.
 4. **Credenciales → Crear credenciales → ID de cliente de OAuth → Android**:
    - Nombre del paquete: `com.asistente.personal`
-   - Huella SHA-1: obtenla con
+   - Huella SHA-1 de la llave con la que se firma el APK que instalas:
      ```bash
-     ./gradlew signingReport
+     keytool -list -v -keystore release.jks -alias asistente
      ```
-     (usa la SHA-1 de la variante `debug`).
+     (si compilas tú en modo debug, usa la SHA-1 que muestra `./gradlew signingReport`).
 5. Listo. En la app toca **Conectar Gmail** y acepta el permiso de solo lectura.
 
 > Mientras la app esté en modo "Prueba", Google puede pedir que vuelvas a autorizar cada cierto tiempo. Es normal para apps personales.
