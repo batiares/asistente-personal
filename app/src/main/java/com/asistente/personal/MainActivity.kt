@@ -3,6 +3,7 @@ package com.asistente.personal
 import android.content.ComponentName
 import android.content.Intent
 import android.content.SharedPreferences
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -27,6 +28,8 @@ import com.asistente.personal.ui.AppActions
 import com.asistente.personal.ui.AppState
 import com.asistente.personal.ui.AsistenteApp
 import com.asistente.personal.ui.AsistenteTheme
+import com.asistente.personal.voice.GeminiVoice
+import com.asistente.personal.voice.VoiceConfig
 import com.asistente.personal.whatsapp.FilterConfig
 import com.asistente.personal.whatsapp.MailStore
 import com.asistente.personal.whatsapp.MessageStore
@@ -37,6 +40,7 @@ import com.google.android.gms.common.api.CommonStatusCodes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Locale
 
 class MainActivity : ComponentActivity(), AppActions {
@@ -62,7 +66,9 @@ class MainActivity : ComponentActivity(), AppActions {
         val dark = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         enableEdgeToEdge(dark, dark)
         super.onCreate(savedInstanceState)
-        tts = TextToSpeech(this) { if (it == TextToSpeech.SUCCESS) tts?.language = Locale("es", "MX") }
+        tts = TextToSpeech(this) { if (it == TextToSpeech.SUCCESS) pickBestLocalVoice() }
+        state.voiceKey = VoiceConfig.apiKey(this)
+        state.voiceName = VoiceConfig.voice(this)
 
         state.messages = MessageStore.load(this)
         state.keywords = FilterConfig.keywords(this)
@@ -85,6 +91,7 @@ class MainActivity : ComponentActivity(), AppActions {
         MessageStore.prefs(this).unregisterOnSharedPreferenceChangeListener(messagesListener)
         MailStore.prefs(this).unregisterOnSharedPreferenceChangeListener(messagesListener)
         tts?.shutdown()
+        player?.release()
         super.onDestroy()
     }
 
@@ -220,6 +227,61 @@ class MainActivity : ComponentActivity(), AppActions {
             ) else append("T1 no tiene partidos programados por ahora. ")
             state.news.firstOrNull()?.let { append("Última noticia de T1: ${it.title}.") }
         }
+        speak(text, state.voiceKey, state.voiceName)
+    }
+
+    // ---------- Voz ----------
+
+    private var player: MediaPlayer? = null
+
+    override fun saveVoice(apiKey: String, voice: String) {
+        VoiceConfig.save(this, apiKey, voice)
+        state.voiceKey = apiKey.trim()
+        state.voiceName = voice
+        state.voiceStatus = if (apiKey.isBlank()) "Sin clave: se usará la voz del teléfono." else "Voz guardada: $voice (Gemini)."
+    }
+
+    override fun testVoice(apiKey: String, voice: String) =
+        speak("Hola, soy tu asistente. Así va a sonar tu resumen de correos, mensajes y partidos de T1.", apiKey.trim(), voice)
+
+    /** Gemini si hay clave; si no hay o falla, la mejor voz en español del teléfono. */
+    private fun speak(text: String, apiKey: String, voice: String) {
+        tts?.stop()
+        player?.release()
+        player = null
+        if (apiKey.isBlank()) return speakLocal(text)
+        state.voiceStatus = "Generando voz con Gemini ($voice)…"
+        lifecycleScope.launch {
+            runCatching {
+                val wav = withContext(Dispatchers.IO) { GeminiVoice.synthesize(text, apiKey, voice) }
+                val file = File(cacheDir, "voz.wav").apply { writeBytes(wav) }
+                player = MediaPlayer().apply {
+                    setDataSource(file.path)
+                    setOnCompletionListener { it.release(); if (player === it) player = null }
+                    prepare()
+                    start()
+                }
+            }
+                .onSuccess { state.voiceStatus = "" }
+                .onFailure {
+                    state.voiceStatus = "Gemini no respondió (${it.message?.take(120)}). Usando la voz del teléfono."
+                    speakLocal(text)
+                }
+        }
+    }
+
+    private fun speakLocal(text: String) {
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "resumen")
+    }
+
+    /** Prefiere voz es-MX, luego la de mayor calidad (las neuronales suelen marcar QUALITY_VERY_HIGH). */
+    private fun pickBestLocalVoice() {
+        val t = tts ?: return
+        t.language = Locale("es", "MX")
+        val best = runCatching { t.voices }.getOrNull().orEmpty()
+            .filter { it.locale.language == "es" && !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
+            .sortedWith(compareBy({ it.locale.country != "MX" }, { -it.quality }, { it.isNetworkConnectionRequired }))
+            .firstOrNull()
+        if (best != null) t.voice = best
     }
 }

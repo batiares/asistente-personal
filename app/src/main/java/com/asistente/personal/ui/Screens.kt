@@ -46,6 +46,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asistente.personal.t1.Match
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import com.asistente.personal.voice.GeminiVoice
 import com.asistente.personal.t1.T1News
 import com.asistente.personal.t1.T1Schedule
 import kotlinx.coroutines.delay
@@ -58,8 +66,9 @@ private val RELOJ = DateTimeFormatter.ofPattern("HH:mm").withZone(T1Schedule.MEX
 private val FECHA_MSG = DateTimeFormatter.ofPattern("dd/MM HH:mm").withZone(T1Schedule.MEXICO)
 
 @Composable
-fun AsistenteApp(state: AppState, actions: AppActions, initialTab: Int = 0) {
+fun AsistenteApp(state: AppState, actions: AppActions, initialTab: Int = 0, initialVoiceSettings: Boolean = false) {
     var tab by rememberSaveable { mutableIntStateOf(initialTab) }
+    var voiceSettings by rememberSaveable { mutableStateOf(initialVoiceSettings) }
     var now by remember { mutableStateOf(Instant.now()) }
     LaunchedEffect(Unit) {
         while (true) { delay(30_000); now = Instant.now() }
@@ -72,20 +81,21 @@ fun AsistenteApp(state: AppState, actions: AppActions, initialTab: Int = 0) {
     )
 
     Column(Modifier.fillMaxSize().cyberBackdrop().statusBarsPadding()) {
-        Header(now, actions::speakSummary)
+        Header(now, state.voiceStatus, actions::speakSummary, onSettings = { voiceSettings = !voiceSettings })
         Box(Modifier.weight(1f).imePadding()) {
-            when (tab) {
-                0 -> EmailsScreen(state, actions)
-                1 -> MessagesScreen(state, actions)
+            when {
+                voiceSettings -> VoiceScreen(state, actions, onClose = { voiceSettings = false })
+                tab == 0 -> EmailsScreen(state, actions)
+                tab == 1 -> MessagesScreen(state, actions)
                 else -> T1Screen(state, actions, now)
             }
         }
-        BottomNav(tab, { tab = it }, badges)
+        BottomNav(if (voiceSettings) -1 else tab, { tab = it; voiceSettings = false }, badges)
     }
 }
 
 @Composable
-private fun Header(now: Instant, onSpeak: () -> Unit) {
+private fun Header(now: Instant, voiceStatus: String, onSpeak: () -> Unit, onSettings: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -99,7 +109,14 @@ private fun Header(now: Instant, onSpeak: () -> Unit) {
             }
         }
         CyberButton("▶ Voz", onSpeak, color = Neon.Magenta)
+        Spacer(Modifier.width(8.dp))
+        CyberButton("⚙", onSettings, color = Neon.Cyan, filled = false,
+            modifier = Modifier.semantics { contentDescription = "Ajustes de voz" })
     }
+    if (voiceStatus.isNotEmpty()) Text(
+        "> $voiceStatus", style = MaterialTheme.typography.labelMedium, color = Neon.Magenta,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+    )
     Box(
         Modifier.fillMaxWidth().height(2.dp)
             .background(Brush.horizontalGradient(listOf(Neon.Yellow, Neon.Magenta, Neon.Cyan)))
@@ -155,6 +172,64 @@ private fun BottomNav(tab: Int, onSelect: (Int) -> Unit, badges: List<Int>) {
 @Composable
 private fun StatusLine(text: String, color: Color = Neon.Cyan) {
     Text("> $text", style = MaterialTheme.typography.labelLarge, color = color)
+}
+
+// ================= VOZ =================
+
+@Composable
+fun VoiceScreen(state: AppState, actions: AppActions, onClose: () -> Unit) {
+    var key by remember { mutableStateOf(state.voiceKey) }
+    var voice by remember { mutableStateOf(state.voiceName.ifEmpty { GeminiVoice.DEFAULT_VOICE }) }
+    var showKey by remember { mutableStateOf(false) }
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = Neon.Magenta, unfocusedBorderColor = Neon.Muted.copy(alpha = 0.6f),
+        focusedLabelColor = Neon.Magenta, unfocusedLabelColor = Neon.Muted, cursorColor = Neon.Magenta,
+        focusedTextColor = Neon.Text, unfocusedTextColor = Neon.Text,
+    )
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = LIST_PADDING, verticalArrangement = GAP) {
+        item { SectionHeader("Voz del asistente", Neon.Magenta, trailing = if (key.isBlank()) "Teléfono" else "Gemini") }
+        item {
+            CyberPanel(accent = Neon.Magenta) {
+                Text("CLAVE DE GEMINI", style = MaterialTheme.typography.labelLarge, color = Neon.Magenta)
+                Text("Con tu clave de Google AI Studio el resumen se lee con la voz natural de Gemini. " +
+                    "La clave se guarda solo en este teléfono.", style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(
+                    key, { key = it }, Modifier.fillMaxWidth(),
+                    label = { Text("Clave de API (AIza…)") }, singleLine = true, shape = ButtonShape, colors = fieldColors,
+                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        Text(if (showKey) "OCULTAR" else "VER", style = MaterialTheme.typography.labelSmall,
+                            color = Neon.Cyan, modifier = Modifier.clickable { showKey = !showKey }.padding(12.dp))
+                    },
+                )
+                CyberButton("Obtener clave en AI Studio", { actions.openUrl("https://aistudio.google.com/apikey") },
+                    Modifier.fillMaxWidth(), color = Neon.Cyan, filled = false)
+            }
+        }
+        item {
+            CyberPanel(accent = Neon.Yellow) {
+                Text("ELIGE LA VOZ", style = MaterialTheme.typography.labelLarge, color = Neon.Yellow)
+                GeminiVoice.VOICES.chunked(2).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { (name, desc) ->
+                            CyberButton("$name · $desc", { voice = name }, Modifier.weight(1f),
+                                color = Neon.Yellow, filled = voice == name)
+                        }
+                    }
+                }
+                Text("Sin clave se usa la mejor voz en español instalada en tu teléfono.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CyberButton("▶ Probar", { actions.testVoice(key, voice) }, Modifier.weight(1f),
+                    color = Neon.Magenta, filled = false)
+                CyberButton("Guardar", { actions.saveVoice(key, voice); onClose() }, Modifier.weight(1f))
+            }
+        }
+    }
 }
 
 // ================= CORREOS =================

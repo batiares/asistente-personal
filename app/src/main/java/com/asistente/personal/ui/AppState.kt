@@ -25,6 +25,10 @@ class AppState {
     var matches by mutableStateOf<List<Match>>(emptyList())
     var t1Status by mutableStateOf("")
     var news by mutableStateOf<List<NewsItem>>(emptyList())
+
+    var voiceKey by mutableStateOf("")
+    var voiceName by mutableStateOf("")
+    var voiceStatus by mutableStateOf("")
 }
 
 interface AppActions {
@@ -39,6 +43,8 @@ interface AppActions {
     fun clearMessages()
     fun openGmail()
     fun clearMail()
+    fun saveVoice(apiKey: String, voice: String)
+    fun testVoice(apiKey: String, voice: String)
 }
 
 const val GMAIL_GUIDE_URL = "https://github.com/batiares/asistente-personal#configurar-gmail-una-sola-vez"

@@ -37,6 +37,13 @@ class ScreenshotTest {
         override fun clearMessages() {}
         override fun openGmail() {}
         override fun clearMail() {}
+        override fun saveVoice(apiKey: String, voice: String) {}
+        override fun testVoice(apiKey: String, voice: String) {}
+    }
+
+    @Test fun voz() = paparazzi.snapshot {
+        val s = sample().apply { voiceKey = "AIzaEjemploNoReal"; voiceName = "Sulafat"; voiceStatus = "Generando voz con Gemini (Sulafat)…" }
+        AsistenteTheme { AsistenteApp(s, NoActions, 0, initialVoiceSettings = true) }
     }
 
     private fun match(id: String, daysFromNow: Long, rival: String, code: String, state: String, t1: Int?, opp: Int?) =

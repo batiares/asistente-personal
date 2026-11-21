@@ -1,6 +1,7 @@
 package com.asistente.personal
 
 import com.asistente.personal.gmail.GmailRepository
+import com.asistente.personal.voice.GeminiVoice
 import com.asistente.personal.t1.T1Mvp
 import com.asistente.personal.t1.T1News
 import com.asistente.personal.t1.T1Schedule
@@ -80,6 +81,26 @@ class LogicTest {
         assertEquals("Faker habla tras Worlds", news[0].title) // la más nueva primero, sin " - Medio"
         assertEquals("Medio B", news[0].source)
         assertEquals("hace 2 h", T1News.hace(news[0].published, Instant.parse("2026-11-20T12:30:00Z")))
+    }
+
+    @Test fun vozGemini() {
+        val body = JSONObject(GeminiVoice.requestBody("Hola", "Kore"))
+        val gen = body.getJSONObject("generationConfig")
+        assertEquals("AUDIO", gen.getJSONArray("responseModalities").getString(0))
+        assertEquals("Kore", gen.getJSONObject("speechConfig").getJSONObject("voiceConfig").getString("voice"))
+        assertEquals("Hola", body.getJSONArray("contents").getJSONObject(0).getJSONArray("parts").getJSONObject(0).getString("text"))
+
+        val pcm = byteArrayOf(1, 2, 3, 4)
+        val b64 = java.util.Base64.getEncoder().encodeToString(pcm)
+        val resp = """{"candidates":[{"content":{"parts":[{"inlineData":{"mimeType":"audio/l16","data":"$b64"}}]}}]}"""
+        val audio = GeminiVoice.extractAudio(resp)
+        assertTrue(audio.contentEquals(pcm))
+
+        val wav = GeminiVoice.ensureWav(audio)
+        assertEquals(44 + pcm.size, wav.size)
+        assertEquals("RIFF", String(wav, 0, 4))
+        assertEquals("WAVE", String(wav, 8, 4))
+        assertTrue(GeminiVoice.ensureWav(wav).contentEquals(wav)) // un WAV no se toca
     }
 
     @Test fun cuentaRegresiva() {
