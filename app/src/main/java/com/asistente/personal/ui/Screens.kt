@@ -81,7 +81,11 @@ fun AsistenteApp(state: AppState, actions: AppActions, initialTab: Int = 0, init
     )
 
     Column(Modifier.fillMaxSize().cyberBackdrop().statusBarsPadding()) {
-        Header(now, state.voiceStatus, actions::speakSummary, onSettings = { voiceSettings = !voiceSettings })
+        // Mientras el asistente lee una sección, se muestra su pestaña.
+        LaunchedEffect(state.speakingSection) {
+            if (state.speakingSection >= 0) { tab = state.speakingSection; voiceSettings = false }
+        }
+        Header(now, state, actions, onSettings = { voiceSettings = !voiceSettings })
         Box(Modifier.weight(1f).imePadding()) {
             when {
                 voiceSettings -> VoiceScreen(state, actions, onClose = { voiceSettings = false })
@@ -95,7 +99,8 @@ fun AsistenteApp(state: AppState, actions: AppActions, initialTab: Int = 0, init
 }
 
 @Composable
-private fun Header(now: Instant, voiceStatus: String, onSpeak: () -> Unit, onSettings: () -> Unit) {
+private fun Header(now: Instant, state: AppState, actions: AppActions, onSettings: () -> Unit) {
+    val voiceStatus = state.voiceStatus
     Row(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -108,11 +113,24 @@ private fun Header(now: Instant, voiceStatus: String, onSpeak: () -> Unit, onSet
                 Text("SYS.ONLINE // CDMX ${RELOJ.format(now)}", style = MaterialTheme.typography.labelMedium, color = Neon.Cyan)
             }
         }
-        CyberButton("▶ Voz", onSpeak, color = Neon.Magenta)
-        Spacer(Modifier.width(8.dp))
-        CyberButton("⚙", onSettings, color = Neon.Cyan, filled = false,
-            modifier = Modifier.semantics { contentDescription = "Ajustes de voz" })
+        if (state.speaking) {
+            CyberButton("■ Parar", actions::stopSpeaking, color = Neon.Magenta)
+            Spacer(Modifier.width(8.dp))
+            CyberButton("⏭", actions::skipSection, color = Neon.Magenta, filled = false,
+                modifier = Modifier.semantics { contentDescription = "Siguiente sección" })
+        } else {
+            CyberButton("▶ Voz", actions::speakSummary, color = Neon.Magenta)
+            Spacer(Modifier.width(8.dp))
+            CyberButton("⚙", onSettings, color = Neon.Cyan, filled = false,
+                modifier = Modifier.semantics { contentDescription = "Ajustes de voz" })
+        }
     }
+    if (state.speaking && state.speakingSection >= 0) Text(
+        "▶ LEYENDO  " + listOf("Correos", "WhatsApp", "T1").withIndex()
+                .joinToString(" → ") { (i, s) -> if (i == state.speakingSection) "[$s]" else s },
+        style = MaterialTheme.typography.labelMedium, color = Neon.Yellow,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
+    )
     if (voiceStatus.isNotEmpty()) Text(
         "> $voiceStatus", style = MaterialTheme.typography.labelMedium, color = Neon.Magenta,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
@@ -367,6 +385,10 @@ fun MessagesScreen(state: AppState, actions: AppActions) {
                         style = MaterialTheme.typography.labelSmall, color = Neon.Muted)
                 }
                 Text(m.text, style = MaterialTheme.typography.bodyMedium)
+                if (m.reason.isNotEmpty()) Text(
+                    "> ${m.reason}".uppercase(), style = MaterialTheme.typography.labelSmall,
+                    color = if (m.reason.startsWith("IA")) Neon.Cyan else Neon.Muted,
+                )
             }
         }
         if (state.messages.isNotEmpty()) item {
@@ -402,6 +424,11 @@ private fun FilterPanel(state: AppState, actions: AppActions, onDone: () -> Unit
     var keywords by remember { mutableStateOf(state.keywords) }
     var vip by remember { mutableStateOf(state.vipChats) }
     var hide by remember { mutableStateOf(state.hideUnimportant) }
+    var useAi by remember { mutableStateOf(state.useAi) }
+    val switchColors = SwitchDefaults.colors(
+        checkedThumbColor = Color.Black, checkedTrackColor = Neon.Magenta,
+        uncheckedThumbColor = Neon.Muted, uncheckedTrackColor = Neon.Panel, uncheckedBorderColor = Neon.Muted,
+    )
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = Neon.Yellow, unfocusedBorderColor = Neon.Muted.copy(alpha = 0.6f),
         focusedLabelColor = Neon.Yellow, unfocusedLabelColor = Neon.Muted, cursorColor = Neon.Yellow,
@@ -409,6 +436,17 @@ private fun FilterPanel(state: AppState, actions: AppActions, onDone: () -> Unit
     )
     CyberPanel(accent = Neon.Yellow) {
         Text("CONFIGURAR FILTRO", style = MaterialTheme.typography.labelLarge, color = Neon.Yellow)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Que Gemini decida (IA)", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    if (state.voiceKey.isBlank()) "Necesita tu clave de Gemini (botón ⚙ arriba)."
+                    else "Entiende el contexto. El texto de cada mensaje se envía a Google para analizarlo.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(useAi, { useAi = it }, colors = switchColors)
+        }
         OutlinedTextField(keywords, { keywords = it }, Modifier.fillMaxWidth(),
             label = { Text("Palabras clave (separadas por coma)") }, shape = ButtonShape, colors = fieldColors)
         OutlinedTextField(vip, { vip = it }, Modifier.fillMaxWidth(),
@@ -416,14 +454,12 @@ private fun FilterPanel(state: AppState, actions: AppActions, onDone: () -> Unit
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Ocultar notificaciones de grupos que no sean importantes",
                 style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Switch(hide, { hide = it }, colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.Black, checkedTrackColor = Neon.Magenta,
-                uncheckedThumbColor = Neon.Muted, uncheckedTrackColor = Neon.Panel, uncheckedBorderColor = Neon.Muted,
-            ))
+            Switch(hide, { hide = it }, colors = switchColors)
         }
-        Text("Tip: agrega @TuNombre como palabra clave para detectar cuando te mencionan.",
+        Text("Con IA, las palabras clave sirven de pista y de respaldo si Gemini no responde. " +
+            "Los chats VIP siempre son importantes. Tip: agrega @TuNombre para detectar menciones.",
             style = MaterialTheme.typography.bodySmall)
-        CyberButton("Guardar", { actions.saveFilter(keywords, vip, hide); onDone() }, Modifier.fillMaxWidth())
+        CyberButton("Guardar", { actions.saveFilter(keywords, vip, hide, useAi); onDone() }, Modifier.fillMaxWidth())
     }
 }
 

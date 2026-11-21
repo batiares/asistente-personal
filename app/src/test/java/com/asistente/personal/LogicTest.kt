@@ -1,6 +1,7 @@
 package com.asistente.personal
 
 import com.asistente.personal.gmail.GmailRepository
+import com.asistente.personal.ai.GeminiFilter
 import com.asistente.personal.voice.GeminiVoice
 import com.asistente.personal.t1.T1Mvp
 import com.asistente.personal.t1.T1News
@@ -101,6 +102,44 @@ class LogicTest {
         assertEquals("RIFF", String(wav, 0, 4))
         assertEquals("WAVE", String(wav, 8, 4))
         assertTrue(GeminiVoice.ensureWav(wav).contentEquals(wav)) // un WAV no se toca
+    }
+
+    @Test fun vozRobusta() {
+        // Formato anterior para modelos viejos
+        val legacy = JSONObject(GeminiVoice.requestBody("Hola", "Kore", legacy = true))
+            .getJSONObject("generationConfig").getJSONObject("speechConfig").getJSONObject("voiceConfig")
+        assertEquals("Kore", legacy.getJSONObject("prebuiltVoiceConfig").getString("voiceName"))
+
+        // Audio en la segunda parte (la primera trae texto)
+        val b64 = java.util.Base64.getEncoder().encodeToString(byteArrayOf(9, 9))
+        val resp = """{"candidates":[{"content":{"parts":[{"text":"ok"},{"inlineData":{"data":"$b64"}}]}}]}"""
+        assertTrue(GeminiVoice.extractAudio(resp).contentEquals(byteArrayOf(9, 9)))
+
+        // WAV con tamaños inválidos (estilo streaming): se rehace la cabecera conservando el audio y la frecuencia
+        val good = GeminiVoice.ensureWav(byteArrayOf(1, 2, 3, 4), defaultRate = 16_000)
+        val broken = good.copyOf().also { for (i in 40..43) it[i] = 0xFF.toByte() }
+        val fixed = GeminiVoice.ensureWav(broken)
+        assertTrue(fixed.contentEquals(good))
+
+        assertEquals("La clave de Gemini no es válida. Revísala en ⚙.",
+            GeminiVoice.friendlyError(java.io.IOException("HTTP 400 API key not valid. Please pass a valid API key.")))
+    }
+
+    @Test fun filtroConGemini() {
+        val resp = """{"candidates":[{"content":{"parts":[{"text":"```json\n{\"important\": true, \"reason\": \"Entrega adelantada\"}\n```"}]}}]}"""
+        val v = GeminiFilter.parseVerdict(resp)
+        assertTrue(v.important)
+        assertEquals("Entrega adelantada", v.reason)
+
+        val p = GeminiFilter.prompt("Equipo", "jaja hoy no puedo", listOf("Ana: ¿vienes?"), listOf("examen"))
+        assertTrue(p.contains("MENSAJE NUEVO: jaja hoy no puedo"))
+        assertTrue(p.contains("examen"))
+
+        // Tope de consultas por minuto
+        val t0 = 1_000_000L
+        repeat(3) { assertTrue(GeminiFilter.allowCall(t0 + it, perMinute = 3)) }
+        assertFalse(GeminiFilter.allowCall(t0 + 10, perMinute = 3))
+        assertTrue(GeminiFilter.allowCall(t0 + 61_000, perMinute = 3))
     }
 
     @Test fun cuentaRegresiva() {

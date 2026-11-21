@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.provider.CalendarContract
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -37,7 +38,12 @@ import com.asistente.personal.whatsapp.WhatsAppListenerService
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -66,7 +72,7 @@ class MainActivity : ComponentActivity(), AppActions {
         val dark = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         enableEdgeToEdge(dark, dark)
         super.onCreate(savedInstanceState)
-        tts = TextToSpeech(this) { if (it == TextToSpeech.SUCCESS) pickBestLocalVoice() }
+        tts = TextToSpeech(this) { if (it == TextToSpeech.SUCCESS) { pickBestLocalVoice(); tts?.setOnUtteranceProgressListener(utteranceListener) } }
         state.voiceKey = VoiceConfig.apiKey(this)
         state.voiceName = VoiceConfig.voice(this)
 
@@ -74,6 +80,7 @@ class MainActivity : ComponentActivity(), AppActions {
         state.keywords = FilterConfig.keywords(this)
         state.vipChats = FilterConfig.vipChats(this)
         state.hideUnimportant = FilterConfig.hideUnimportant(this)
+        state.useAi = FilterConfig.useAi(this)
         state.mail = MailStore.load(this)
         MessageStore.prefs(this).registerOnSharedPreferenceChangeListener(messagesListener)
         MailStore.prefs(this).registerOnSharedPreferenceChangeListener(messagesListener)
@@ -90,8 +97,8 @@ class MainActivity : ComponentActivity(), AppActions {
     override fun onDestroy() {
         MessageStore.prefs(this).unregisterOnSharedPreferenceChangeListener(messagesListener)
         MailStore.prefs(this).unregisterOnSharedPreferenceChangeListener(messagesListener)
+        stopSpeaking()
         tts?.shutdown()
-        player?.release()
         super.onDestroy()
     }
 
@@ -181,11 +188,12 @@ class MainActivity : ComponentActivity(), AppActions {
             .onFailure { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
     }
 
-    override fun saveFilter(keywords: String, vipChats: String, hideUnimportant: Boolean) {
-        FilterConfig.save(this, keywords, vipChats, hideUnimportant)
+    override fun saveFilter(keywords: String, vipChats: String, hideUnimportant: Boolean, useAi: Boolean) {
+        FilterConfig.save(this, keywords, vipChats, hideUnimportant, useAi)
         state.keywords = keywords
         state.vipChats = vipChats
         state.hideUnimportant = hideUnimportant
+        state.useAi = useAi
     }
 
     override fun clearMessages() = MessageStore.clear(this)
@@ -205,38 +213,57 @@ class MainActivity : ComponentActivity(), AppActions {
         runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
     }
 
-    /** El "modo asistente": lee en voz alta lo importante del momento. */
+    /** El "modo asistente": lee lo importante por secciones (correos, WhatsApp, T1) y cambia de pestaña. */
     override fun speakSummary() {
         val since = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
-        val msgs = state.messages.filter { it.important && it.time > since }.take(3)
-        val next = T1Schedule.next(state.matches)
-        val text = buildString {
+        val correos = buildString {
+            append("Correos. ")
             val recentMail = state.mail.filter { it.time > since }.take(3)
-            if (state.emails.isEmpty() && recentMail.isNotEmpty()) {
-                append("Tienes ${recentMail.size} correos importantes recientes. ")
-                recentMail.forEach { append("De ${it.chat}: ${it.text.lineSequence().first()}. ") }
-            } else if (state.emails.isEmpty()) append("No tienes correos importantes nuevos. ")
-            else {
-                append("Tienes ${state.emails.size} correos importantes. ")
-                state.emails.take(3).forEach { append("De ${it.fromName}: ${it.subject}. ") }
+            when {
+                state.emails.isNotEmpty() -> {
+                    append("Tienes ${state.emails.size} correos importantes. ")
+                    state.emails.take(3).forEach { append("De ${it.fromName}: ${it.subject}. ") }
+                }
+                recentMail.isNotEmpty() -> {
+                    append("Tienes ${recentMail.size} correos importantes recientes. ")
+                    recentMail.forEach { append("De ${it.chat}: ${it.text.lineSequence().first()}. ") }
+                }
+                else -> append("No tienes correos importantes nuevos.")
             }
-            if (msgs.isEmpty()) append("No hay mensajes importantes de WhatsApp hoy. ")
+        }
+        val msgs = state.messages.filter { it.important && it.time > since }.take(4)
+        val whatsapp = buildString {
+            append("WhatsApp. ")
+            if (msgs.isEmpty()) append("No hay mensajes importantes hoy.")
             else {
-                append("Mensajes importantes: ")
+                append("Tienes ${msgs.size} mensajes importantes. ")
                 msgs.forEach { append("En ${it.chat}: ${it.text}. ") }
             }
-            if (next != null) append(
-                "El próximo partido de T1 es contra ${next.opponent}, el ${T1Schedule.fechaMx(next.start)} " +
-                    "a las ${T1Schedule.horaMx(next.start)}, hora de México."
-            ) else append("T1 no tiene partidos programados por ahora. ")
-            state.news.firstOrNull()?.let { append("Última noticia de T1: ${it.title}.") }
         }
-        speak(text, state.voiceKey, state.voiceName)
+        val next = T1Schedule.next(state.matches)
+        val last = state.matches.lastOrNull { it.finished }
+        val t1 = buildString {
+            append("T1. ")
+            if (next != null) append(
+                "El próximo partido es contra ${next.opponent}, el ${T1Schedule.fechaMx(next.start)} " +
+                    "a las ${T1Schedule.horaMx(next.start)}, hora de México. "
+            ) else append("No hay partidos programados por ahora. ")
+            if (last != null) {
+                val won = (last.t1Wins ?: 0) > (last.opponentWins ?: 0)
+                append("En su último partido ${if (won) "le ganó" else "perdió"} ${last.t1Wins} a ${last.opponentWins} contra ${last.opponent}. ")
+                last.mvp?.let { append("El MVP fue $it. ") }
+            }
+            state.news.firstOrNull()?.let { append("Última noticia: ${it.title}.") }
+        }
+        narrate(listOf(0 to correos, 1 to whatsapp, 2 to t1), state.voiceKey, state.voiceName)
     }
 
     // ---------- Voz ----------
 
     private var player: MediaPlayer? = null
+    private var narration: Job? = null
+    private var sectionDone: CompletableDeferred<Unit>? = null
+    @Volatile private var localUtterance: String? = null
 
     override fun saveVoice(apiKey: String, voice: String) {
         VoiceConfig.save(this, apiKey, voice)
@@ -245,37 +272,103 @@ class MainActivity : ComponentActivity(), AppActions {
         state.voiceStatus = if (apiKey.isBlank()) "Sin clave: se usará la voz del teléfono." else "Voz guardada: $voice (Gemini)."
     }
 
-    override fun testVoice(apiKey: String, voice: String) =
-        speak("Hola, soy tu asistente. Así va a sonar tu resumen de correos, mensajes y partidos de T1.", apiKey.trim(), voice)
+    override fun testVoice(apiKey: String, voice: String) = narrate(
+        listOf(-1 to "Hola, soy tu asistente. Así va a sonar tu resumen de correos, mensajes y partidos de T1."),
+        apiKey.trim(), voice,
+    )
 
-    /** Gemini si hay clave; si no hay o falla, la mejor voz en español del teléfono. */
-    private fun speak(text: String, apiKey: String, voice: String) {
+    override fun skipSection() {
+        player?.runCatching { stop() }
         tts?.stop()
-        player?.release()
-        player = null
-        if (apiKey.isBlank()) return speakLocal(text)
-        state.voiceStatus = "Generando voz con Gemini ($voice)…"
-        lifecycleScope.launch {
-            runCatching {
-                val wav = withContext(Dispatchers.IO) { GeminiVoice.synthesize(text, apiKey, voice) }
-                val file = File(cacheDir, "voz.wav").apply { writeBytes(wav) }
-                player = MediaPlayer().apply {
-                    setDataSource(file.path)
-                    setOnCompletionListener { it.release(); if (player === it) player = null }
-                    prepare()
-                    start()
+        sectionDone?.complete(Unit)
+    }
+
+    override fun stopSpeaking() {
+        narration?.cancel()
+        narration = null
+        skipSection()
+        state.speaking = false
+        state.speakingSection = -1
+    }
+
+    /**
+     * Lee cada sección por turnos (cambiando a su pestaña). Con clave, Gemini genera las secciones en paralelo
+     * para que no haya silencio entre una y otra; si una falla, esa se lee con la voz del teléfono.
+     */
+    private fun narrate(sections: List<Pair<Int, String>>, apiKey: String, voice: String) {
+        stopSpeaking()
+        state.speaking = true
+        narration = lifecycleScope.launch {
+            try {
+                val audio = if (apiKey.isBlank()) null else {
+                    state.voiceStatus = "Generando voz con Gemini ($voice)…"
+                    sections.map { (_, text) ->
+                        async(Dispatchers.IO) { runCatching { GeminiVoice.synthesize(text, apiKey, voice) } }
+                    }
+                }
+                sections.forEachIndexed { i, (tab, text) ->
+                    state.speakingSection = tab
+                    val result = audio?.get(i)?.await()
+                    val wav = result?.getOrNull()
+                    val played = wav != null && playWav(wav, i)
+                    if (played) state.voiceStatus = ""
+                    else {
+                        result?.exceptionOrNull()?.let { state.voiceStatus = "Gemini: ${it.message} · Usando la voz del teléfono." }
+                        speakLocalAwait(text)
+                    }
+                    delay(400)
+                }
+            } finally {
+                // Solo si sigue siendo la narración actual (una nueva pudo haber empezado ya).
+                if (narration === coroutineContext[Job]) {
+                    state.speaking = false
+                    state.speakingSection = -1
                 }
             }
-                .onSuccess { state.voiceStatus = "" }
-                .onFailure {
-                    state.voiceStatus = "Gemini no respondió (${it.message?.take(120)}). Usando la voz del teléfono."
-                    speakLocal(text)
-                }
         }
     }
 
-    private fun speakLocal(text: String) {
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "resumen")
+    /** Reproduce y espera a que termine (o a que se salte la sección). false si no se pudo reproducir. */
+    private suspend fun playWav(wav: ByteArray, index: Int): Boolean {
+        val done = CompletableDeferred<Unit>().also { sectionDone = it }
+        val mp = runCatching {
+            val file = File(cacheDir, "voz$index.wav").apply { writeBytes(wav) }
+            MediaPlayer().apply {
+                setDataSource(file.path)
+                setOnCompletionListener { done.complete(Unit) }
+                setOnErrorListener { _, _, _ -> done.complete(Unit); true }
+                prepare()
+                start()
+            }
+        }.getOrElse {
+            state.voiceStatus = "No se pudo reproducir el audio de Gemini: ${it.message}"
+            return false
+        }
+        player = mp
+        try {
+            done.await()
+        } finally {
+            mp.release()
+            if (player === mp) player = null
+        }
+        return true
+    }
+
+    private suspend fun speakLocalAwait(text: String) {
+        val t = tts ?: return
+        val done = CompletableDeferred<Unit>().also { sectionDone = it }
+        val id = "sec${System.nanoTime()}"
+        localUtterance = id
+        if (t.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) != TextToSpeech.SUCCESS) return
+        // Tope por si el motor de voz nunca avisa que terminó.
+        withTimeoutOrNull(3 * 60_000L) { done.await() }
+    }
+
+    private val utteranceListener = object : UtteranceProgressListener() {
+        override fun onStart(id: String?) {}
+        override fun onDone(id: String?) { if (id == localUtterance) sectionDone?.complete(Unit) }
+        @Deprecated("API antigua") override fun onError(id: String?) { onDone(id) }
+        override fun onStop(id: String?, interrupted: Boolean) { onDone(id) }
     }
 
     /** Prefiere voz es-MX, luego la de mayor calidad (las neuronales suelen marcar QUALITY_VERY_HIGH). */

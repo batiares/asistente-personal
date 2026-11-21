@@ -33,12 +33,19 @@ class ScreenshotTest {
         override fun openNotificationAccess() {}
         override fun openUrl(url: String) {}
         override fun addToCalendar(m: Match) {}
-        override fun saveFilter(keywords: String, vipChats: String, hideUnimportant: Boolean) {}
+        override fun saveFilter(keywords: String, vipChats: String, hideUnimportant: Boolean, useAi: Boolean) {}
+        override fun skipSection() {}
+        override fun stopSpeaking() {}
         override fun clearMessages() {}
         override fun openGmail() {}
         override fun clearMail() {}
         override fun saveVoice(apiKey: String, voice: String) {}
         override fun testVoice(apiKey: String, voice: String) {}
+    }
+
+    @Test fun leyendoWhatsapp() = paparazzi.snapshot {
+        val s = sample().apply { speaking = true; speakingSection = 1 }
+        AsistenteTheme { AsistenteApp(s, NoActions, 1) }
     }
 
     @Test fun voz() = paparazzi.snapshot {
@@ -63,9 +70,9 @@ class ScreenshotTest {
             WaMessage(now - 5_400_000, "Coordinación Académica", "Cambio de horario: examen final\nEl examen de Cálculo se mueve al lunes a las 9:00.", true),
         )
         messages = listOf(
-            WaMessage(now - 600_000, "Equipo Proyecto Final", "Ana: URGENTE, la entrega se adelantó a mañana", true),
-            WaMessage(now - 3_600_000, "Familia", "Mamá: ¿vienes a comer el domingo?", true),
-            WaMessage(now - 7_200_000, "Memes 2.0", "Luis: jajaja mira este video", false),
+            WaMessage(now - 600_000, "Equipo Proyecto Final", "Ana: la entrega se adelantó a mañana a las 8", true, "IA: Entrega adelantada, plazo mañana"),
+            WaMessage(now - 3_600_000, "Familia", "Mamá: ¿vienes a comer el domingo?", true, "Chat VIP"),
+            WaMessage(now - 7_200_000, "Memes 2.0", "Luis: jajaja hoy no puedo, mira este video", false, "IA: Plática casual"),
         )
         listenerEnabled = true
         news = listOf(

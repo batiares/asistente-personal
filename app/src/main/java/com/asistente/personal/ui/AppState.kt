@@ -29,6 +29,10 @@ class AppState {
     var voiceKey by mutableStateOf("")
     var voiceName by mutableStateOf("")
     var voiceStatus by mutableStateOf("")
+    var speaking by mutableStateOf(false)
+    /** Pestaña que se está leyendo en voz alta (-1 = ninguna). */
+    var speakingSection by mutableStateOf(-1)
+    var useAi by mutableStateOf(true)
 }
 
 interface AppActions {
@@ -39,12 +43,14 @@ interface AppActions {
     fun openNotificationAccess()
     fun openUrl(url: String)
     fun addToCalendar(m: Match)
-    fun saveFilter(keywords: String, vipChats: String, hideUnimportant: Boolean)
+    fun saveFilter(keywords: String, vipChats: String, hideUnimportant: Boolean, useAi: Boolean)
     fun clearMessages()
     fun openGmail()
     fun clearMail()
     fun saveVoice(apiKey: String, voice: String)
     fun testVoice(apiKey: String, voice: String)
+    fun skipSection()
+    fun stopSpeaking()
 }
 
 const val GMAIL_GUIDE_URL = "https://github.com/batiares/asistente-personal#configurar-gmail-una-sola-vez"
