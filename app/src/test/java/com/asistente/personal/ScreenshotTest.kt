@@ -4,6 +4,7 @@ import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
 import com.asistente.personal.gmail.Email
 import com.asistente.personal.t1.Match
+import com.asistente.personal.t1.NewsItem
 import com.asistente.personal.ui.AppActions
 import com.asistente.personal.ui.AppState
 import com.asistente.personal.ui.AsistenteApp
@@ -18,7 +19,11 @@ import java.time.Instant
 class ScreenshotTest {
 
     @get:Rule
-    val paparazzi = Paparazzi(deviceConfig = DeviceConfig.PIXEL_6, theme = "android:Theme.Material.NoActionBar")
+    // Pantalla extra alta para que la captura de T1 muestre también noticias y resultados.
+    val paparazzi = Paparazzi(
+        deviceConfig = DeviceConfig.PIXEL_6.copy(screenHeight = 4200),
+        theme = "android:Theme.Material.NoActionBar",
+    )
 
     private object NoActions : AppActions {
         override fun refreshEmails() {}
@@ -49,9 +54,15 @@ class ScreenshotTest {
             WaMessage(now - 7_200_000, "Memes 2.0", "Luis: jajaja mira este video", false),
         )
         listenerEnabled = true
+        news = listOf(
+            NewsItem("T1 confirma su plantilla para la próxima temporada", "Medio Ejemplo",
+                "https://example.com/1", Instant.now().minus(Duration.ofHours(3))),
+            NewsItem("Faker habla del cierre de temporada y los planes del equipo", "Otro Medio",
+                "https://example.com/2", Instant.now().minus(Duration.ofDays(2))),
+        )
         matches = listOf(
-            match("a", -12, "Gen.G", "GEN", "completed", 3, 1),
-            match("b", -5, "Hanwha Life Esports", "HLE", "completed", 1, 2),
+            match("a", -12, "Gen.G", "GEN", "completed", 3, 1).copy(mvp = "Faker"),
+            match("b", -5, "Hanwha Life Esports", "HLE", "completed", 1, 2).copy(mvp = "Zeka"),
             match("c", 2, "Gen.G", "GEN", "unstarted", null, null),
             match("d", 6, "Dplus KIA", "DK", "unstarted", null, null),
         )

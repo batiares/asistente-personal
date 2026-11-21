@@ -20,6 +20,7 @@ data class Match(
     val bestOf: Int,
     val t1Wins: Int?,
     val opponentWins: Int?,
+    val mvp: String? = null,  // MVP oficial de la serie (Leaguepedia); null si no hubo o aún no se sabe
 ) {
     val finished get() = state == "completed"
 }

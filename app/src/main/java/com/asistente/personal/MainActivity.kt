@@ -20,6 +20,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.lifecycleScope
 import com.asistente.personal.gmail.GmailRepository
 import com.asistente.personal.t1.Match
+import com.asistente.personal.t1.T1Mvp
+import com.asistente.personal.t1.T1News
 import com.asistente.personal.t1.T1Schedule
 import com.asistente.personal.ui.AppActions
 import com.asistente.personal.ui.AppState
@@ -122,12 +124,21 @@ class MainActivity : ComponentActivity(), AppActions {
     override fun refreshT1() {
         state.t1Status = "Sincronizando calendario…"
         lifecycleScope.launch {
-            runCatching { withContext(Dispatchers.IO) { T1Schedule.fetch() } }
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val matches = T1Schedule.fetch()
+                    // Si Leaguepedia falla, el calendario se muestra igual, solo sin MVP.
+                    T1Mvp.attach(matches, runCatching { T1Mvp.fetch() }.getOrDefault(emptyMap()))
+                }
+            }
                 .onSuccess {
                     state.matches = it
                     state.t1Status = if (it.isEmpty()) "No se encontraron partidos recientes de T1." else ""
                 }
                 .onFailure { state.t1Status = "Sin conexión con LoL Esports: ${it.message}" }
+        }
+        lifecycleScope.launch {
+            runCatching { withContext(Dispatchers.IO) { T1News.fetch() } }.onSuccess { state.news = it }
         }
     }
 
@@ -190,7 +201,8 @@ class MainActivity : ComponentActivity(), AppActions {
             if (next != null) append(
                 "El próximo partido de T1 es contra ${next.opponent}, el ${T1Schedule.fechaMx(next.start)} " +
                     "a las ${T1Schedule.horaMx(next.start)}, hora de México."
-            ) else append("T1 no tiene partidos programados por ahora.")
+            ) else append("T1 no tiene partidos programados por ahora. ")
+            state.news.firstOrNull()?.let { append("Última noticia de T1: ${it.title}.") }
         }
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "resumen")
     }

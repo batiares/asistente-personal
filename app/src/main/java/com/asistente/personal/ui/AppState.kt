@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.asistente.personal.gmail.Email
 import com.asistente.personal.t1.Match
+import com.asistente.personal.t1.NewsItem
 import com.asistente.personal.whatsapp.WaMessage
 
 /** Todo lo que muestran las pantallas. La Activity lo llena; las capturas de prueba usan datos de ejemplo. */
@@ -21,6 +22,7 @@ class AppState {
 
     var matches by mutableStateOf<List<Match>>(emptyList())
     var t1Status by mutableStateOf("")
+    var news by mutableStateOf<List<NewsItem>>(emptyList())
 }
 
 interface AppActions {

@@ -1,6 +1,8 @@
 package com.asistente.personal
 
 import com.asistente.personal.gmail.GmailRepository
+import com.asistente.personal.t1.T1Mvp
+import com.asistente.personal.t1.T1News
 import com.asistente.personal.t1.T1Schedule
 import com.asistente.personal.whatsapp.ImportanceFilter
 import org.json.JSONObject
@@ -50,6 +52,34 @@ class LogicTest {
         // Corea es UTC+9: ya es el día siguiente a las 7 am.
         assertEquals(7, T1Schedule.enCorea(t).hour)
         assertEquals(9, T1Schedule.enCorea(t).dayOfMonth)
+    }
+
+    @Test fun mvpDeLaSerie() {
+        val json = """{"cargoquery":[
+            {"title":{"MVP":"Bin (Chen Ze-Bin)","DateTime UTC":"2026-11-08 22:00:00"}},
+            {"title":{"MVP":"N/A","DateTime UTC":"2026-10-28 20:00:00"}},
+            {"title":{"MVP":"Faker","DateTime UTC":"2026-11-06 22:00:00"}}]}"""
+        val mvps = T1Mvp.parse(json)
+        assertEquals(2, mvps.size)
+        val withMvp = T1Mvp.attach(T1Schedule.parse(schedule).matches, mvps)
+        assertEquals("Bin", withMvp.single().mvp) // mismo inicio 2026-11-08 22:00 UTC
+        val far = withMvp.single().copy(start = Instant.parse("2026-01-01T00:00:00Z"), mvp = null)
+        assertNull(T1Mvp.attach(listOf(far), mvps).single().mvp)
+    }
+
+    @Test fun noticias() {
+        val rss = """<?xml version="1.0" encoding="UTF-8"?><rss><channel>
+            <item><title>T1 anuncia su nueva plantilla - Medio A</title><link>https://a.example/1</link>
+              <pubDate>Thu, 12 Nov 2026 08:00:00 GMT</pubDate><source url="https://a.example">Medio A</source></item>
+            <item><title>Faker habla tras Worlds - Medio B</title><link>https://b.example/2</link>
+              <pubDate>Fri, 20 Nov 2026 10:00:00 GMT</pubDate><source url="https://b.example">Medio B</source></item>
+            <item><title>Sin fecha</title><link>x</link></item>
+        </channel></rss>"""
+        val news = T1News.parse(rss)
+        assertEquals(2, news.size)
+        assertEquals("Faker habla tras Worlds", news[0].title) // la más nueva primero, sin " - Medio"
+        assertEquals("Medio B", news[0].source)
+        assertEquals("hace 2 h", T1News.hace(news[0].published, Instant.parse("2026-11-20T12:30:00Z")))
     }
 
     @Test fun cuentaRegresiva() {

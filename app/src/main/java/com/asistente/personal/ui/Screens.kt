@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asistente.personal.t1.Match
+import com.asistente.personal.t1.T1News
 import com.asistente.personal.t1.T1Schedule
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -338,6 +339,19 @@ fun T1Screen(state: AppState, actions: AppActions, now: Instant) {
             item { SectionHeader("Próximos", Neon.Cyan) }
             items(upcoming, key = { it.id }) { UpcomingRow(it, actions) }
         }
+        if (state.news.isNotEmpty()) {
+            item { SectionHeader("Noticias", Neon.Violet, trailing = "Google News") }
+            items(state.news) { n ->
+                CyberPanel(accent = Neon.Violet, onClick = { actions.openUrl(n.link) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Tag(n.source.ifEmpty { "Noticia" }.take(24), Neon.Violet)
+                        Text(T1News.hace(n.published, now).uppercase(), style = MaterialTheme.typography.labelSmall,
+                            color = Neon.Muted)
+                    }
+                    Text(n.title, style = MaterialTheme.typography.titleSmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
         if (past.isNotEmpty()) {
             item { SectionHeader("Resultados", Neon.Muted) }
             items(past, key = { it.id }) { ResultRow(it) }
@@ -412,6 +426,16 @@ private fun ResultRow(m: Match) {
                 Text("T1 $t1 - $rival ${m.opponentCode}", style = MaterialTheme.typography.titleMedium)
                 Text("${m.league} · ${m.block}", style = MaterialTheme.typography.bodySmall,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+                m.mvp?.let {
+                    Row(
+                        Modifier.padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Tag("MVP", Neon.Yellow)
+                        Text(it, style = MaterialTheme.typography.labelLarge, color = Neon.Yellow)
+                    }
+                }
             }
             Text(T1Schedule.fechaCorta(m.start), style = MaterialTheme.typography.labelSmall, color = Neon.Muted)
         }
